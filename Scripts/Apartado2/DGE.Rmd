@@ -1,0 +1,91 @@
+---
+title: "dge_project"
+output: html_document
+date: "2026-03-29"
+---
+
+```{r setup, include=FALSE}
+library("DESeq2")
+library("pheatmap")
+library("RColorBrewer")
+library("EnhancedVolcano")
+library("vsn")
+library("here")
+
+
+# Establece el directorio raíz del documento usando 'here'
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+
+
+
+## Carga y sincronización de los datos 
+
+
+The first step is reading the expresssion matrix and the metadata file. Columns of the expression matrix should be in the same order as the files in metadata.
+
+```{r}
+counts <- read.table(here("Data/counts/rawcounts.tsv"), header = TRUE, row.names = 1, sep = "\t", check.names = FALSE)
+
+metadata <- read.table("Data/metadata/metadata.tsv", header = TRUE, row.names = 1, sep = "\t")
+
+counts <- counts[, rownames(metadata)]
+#metadata
+```
+
+
+* header = TRUE: la primera fila contiene los nombres de las columnas
+
+* row.names = 1: la primera columna se usa como nombres de las filas (no como datos)
+
+* check.names = FALSE: Evita que R cambie guiones o puntos en los nombres de tus muestras (muy importante para que coincidan con el metadata).
+
+
+## Definición del modelo experimental
+
+```{r}
+metadata$group <- factor(paste(metadata$agent, metadata$time, sep = "_"))
+```
+
+paste: Une las columnas "treatment" y "time" (ej. "OHT" y "24h" se convierten en "OHT_24h").
+
+factor: Convierte ese texto en una categoría estadística. Esto facilita comparar "OHT a las 24h" contra "Control a las 24h" directamente.
+
+
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts, colData = metadata, design = ~ group)
+```
+
+
+## Filtrado y normalización
+
+
+```{r}
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+dds <- DESeq(dds)
+```
+```{r}
+
+vsd <- vst(dds, blind = TRUE)
+plotPCA(vsd, intgroup = "cell")
+plotPCA(vsd, intgroup = "dex")
+```
+
+## Extracción de resultados
+
+```{r}
+res_OHT_24 <- results(dds, contrast = c("group", "OHT_24h", "Control_24h"), alpha = 0.05)
+```
+
+
+```{r}
+res_OHT_24_sig <- subset(res_OHT_24, padj < 0.05 & abs(log2FoldChange) > 1)
+```
+
+```{r}
+write.csv(as.data.frame(res_OHT_24_sig), here("Output/Apartado2/DEG_OHT_24h.csv"))
+```
+
